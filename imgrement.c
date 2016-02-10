@@ -24,6 +24,7 @@ typedef struct bio_vec *bioVec;
 #define bio_sector(bio) (bio)->bi_sector
 #define bio_size(bio) (bio)->bi_size
 #define bio_idx(bio) (bio)->bi_idx
+#define bio_cnt(bio) (bio)->bi_vcnt
 #else
 typedef struct bvecIter bvecIter;
 typedef struct bioVec bioVec;
@@ -40,43 +41,109 @@ struct imgrementDevice {
         make_request_fn *origReqFn;
 } *imgrementDevice;
 
-static void traceRequestFn(struct request_queue *queue, struct bio *bio)
+struct blockDelta {
+        int start;
+        int end;
+        int size;
+        int offset;
+        char *data;
+};
+
+struct ioActivity {
+        char rw;
+        int dataSize;
+        int deltaCount;
+        struct blockDelta *deltas;
+};
+
+static int findDamn(char *data, int len)
 {
-        int i, offset, size;
+        int i = 0, count = 0;
+        for (; i < len; ++i)
+                if (data[i] == 'D' && data[i + 1] == 'A' && data[i + 2] == 'M' && data[i + 3] == 'N') ++count;
+        return count;
+}
+
+static struct ioActivity *extractActivity(struct bio *bio)
+{
+        int nextSect;
         bvecIter iter;
         bioVec bvec;
         char *data;
+        char *err = NULL;
 
-        sector_t startSect, endSect = bio_sector(bio);
-        int wholeSize = bio_size(bio);
-        int write = bio_data_dir(bio);
+        struct blockDelta *delta;
+        struct ioActivity *ioActivity;
 
-        LOG("%s sector: %d, bytes to transfer: %d",
-            write? "W" : "R",
-            endSect,
-            wholeSize);
+        ioActivity = vmalloc(sizeof(struct ioActivity));
+        _astgo(ioActivity != NULL, "Error allocating ioActivity", err, extract_error);
+        ioActivity->rw = bio_data_dir(bio);
+        ioActivity->dataSize = bio_size(bio);
+        ioActivity->deltaCount = bio_cnt(bio);
+
+        ioActivity->deltas = vmalloc(ioActivity->deltaCount * sizeof(struct blockDelta));
+        _astgo(ioActivity->deltas != NULL, "Error allocating ioActivity->deltas", err, extract_error);
+        delta = ioActivity->deltas;
+        nextSect = bio_sector(bio);
 
         bio_for_each_segment(bvec, bio, iter) {
-                startSect = endSect;
-                size = bio_iter_len(bio, iter);
-                endSect = startSect + size / SECTOR_SIZE - 1;
+                int idx;
 
-                LOG("bv #%d: len %d, offset %d, at (%d, %d)",
-                    bio_iter_idx(iter),
-                    bio_iter_len(bio, iter),
-                    bio_iter_offset(bio, iter),
-                    startSect, endSect);
+                delta->start = nextSect;
+                delta->size = bio_iter_len(bio, iter);
+                nextSect = delta->start + delta->size / SECTOR_SIZE;
+                delta->end = nextSect - 1;
+                delta->offset = bio_iter_offset(bio, iter);
 
-                data = page_address(bio_iter_page(bio, iter));
+                data = kmap(bio_iter_page(bio, iter));
+                idx = findDamn(data, PAGE_SIZE);
+                if (idx >= 0) LOG("Found DAMN from page %d times", idx);
+                delta->data = vmalloc(delta->size);
+                _astgo(delta->data != NULL, "Error allocating delta->data", err, extract_error);
+                memcpy(delta->data, data + delta->offset, delta->size);
+                kunmap(bio_iter_page(bio, iter));
 
-                /* ret = cow_write_current(dev->sd_cow, startSect, data); */
-                offset = bio_iter_offset(bio, iter);
-                for (i = offset; i < size; ++i)
-                        if (data[i] == 'D' && data[i + 1] == 'A' && data[i + 2] == 'M' && data[i + 3] == 'N')
-                                LOG("%s at %d", data + i, i);
-                endSect++;
-                /* kunmap(bio_iter_page(bio, iter)); */
+                delta++;
         }
+
+        return ioActivity;
+
+extract_error:
+        LOG_VAR(err);
+        return NULL;
+}
+
+
+
+static void freeIoa(struct ioActivity *ioActivity)
+{
+        int i;
+        for (i = 0; i < ioActivity->deltaCount; ++i) vfree(ioActivity->deltas[i].data);
+        vfree(ioActivity->deltas);
+        vfree(ioActivity);
+}
+
+static void logActivity(struct ioActivity *ioActivity)
+{
+        int i;
+        LOG("%s, bytes to transfer: %d, delta count: %d", ioActivity->rw? "W" : "R", ioActivity->dataSize, ioActivity->deltaCount);
+
+        for (i = 0; i < ioActivity->deltaCount; ++i) {
+                int count;
+                struct blockDelta *delta = &ioActivity->deltas[i];
+                LOG("bv #%d: len %d, offset %d, at (%d, %d)", i, delta->size, delta->offset, delta->start, delta->end);
+                count = findDamn(delta->data, delta->size);
+                if (count >= 0) LOG("Found DAMN from deltas %d times", count);
+        }
+}
+
+static void traceRequestFn(struct request_queue *queue, struct bio *bio)
+{
+        struct ioActivity *ioa;
+
+        ioa = extractActivity(bio);
+        logActivity(ioa);
+        freeIoa(ioa);
 
         imgrementDevice->origReqFn(queue, bio);
 }
@@ -96,7 +163,7 @@ static void imgrementExit(void)
 static int __init imgrementInit(void)
 {
         char* err = NULL;
-        struct imgrementDevice *dev = NULL;
+        struct imgrementDevice *dev;
 
         LOG("Initializing..");
 
