@@ -2,9 +2,9 @@
 A simple kernel module to intercept all requests targeted at your disk device. Yeah.. it can literally catch all requests. This program map I/O information provided by kernel data structures into our own structures and show the information afterwards. The expected informations are sector number and data size. As you may have been thinking, we can show the information directly from kernel data structures without mapping it. The mapping part is meant to be a showcase only. 
 
 ## Getting started
-This program can only be executed on Linux because it is a Linux kernel module. Even if you have different kernel version, it won't run unless you recompile it with matching version. Compilation has to be done on Linux as well. Well, if you know how to do it outside Linux, I would love to hear it.
+This program can only be executed on Linux because it is a Linux kernel module. Even if you have different kernel version, it won't run unless you recompile it with matching version. Compilation has to be done on Linux as well. Well, if you know how to do it outside Linux, I'd love to hear it.
 
-It has already worked properly on Ubuntu. Windows or Mac users? Don't worry, you can still use virtual machines. To make your life easier, we've configured `Vagrantfile` which can create a VM with additional disk device to our tracer. The vagrant configuration only work with Virtual Box provider.
+This program has already worked properly on Ubuntu. Windows or Mac users? Don't worry, you can still use virtual machines. To make your life easier, we've configured `Vagrantfile` which can create a VM with additional disk device to our tracer. The vagrant configuration only work with Virtual Box provider.
 
 ## Prerequisites
 - Linux machine
@@ -52,7 +52,7 @@ imgrement.ko     imgrement.o      Module.symvers  Vagrantfile
 imgrement.mod.c  Makefile         provision.sh
 ```
 
-The most important file is `imgrement.ko`. It is the so called kernel module, and yes, `ko` is actually kernel object. We can install this module into the kernel by using `insmod` but before we use it, let's see what the vagrant file had configured for us. Let's see what disk already been attached.
+The most important file is `imgrement.ko`. It is the so called kernel module, and yes, `ko` is kernel object. We can install this module into the kernel by using `insmod` but before we use it, let's see what the vagrant file had configured for us. Let's see what disk already been attached.
 ```
 root@ubuntu:/vagrant# lsblk
 NAME   MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
@@ -77,7 +77,7 @@ root@ubuntu:/vagrant# dmesg | tail
 [ 4060.973987] imgrement: sdb trace initialization succeeded
 ```
 
-Write some text to some file inside `/mnt` to initiate write I/O request.
+Write some text to a file inside `/mnt` to initiate write I/O request.
 ```
 # echo 'DAMNDAMNDAMN' >> /mnt/damn
 # dmesg | tail
@@ -92,8 +92,9 @@ Write some text to some file inside `/mnt` to initiate write I/O request.
 
 We can detect an `R` or read activity in `sdb`. Because `sdb` is formatted with 1024 bytes block size, every I/O request has 1024 size. Note that the number of sector is always two as in `(296, 297), (38, 39), (36, 37)`. It is because our disk sector size is 512 bytes so each request contains 2 sectors.
 
-Why all of those activities are reads? Did we just write `DAMN` to a file? Kernel employs a delayed writing, every write request will enter a cache first and after 10 seconds or so, all the delayed writing will be flushed.
-> Yes we can use `sync` to trigger flush. But this program will crash because of it. I'll never fix this because this is only a demo :)
+Why all of those activities are reads? Did we just write `DAMN` to a file? Kernel employs a delayed write, every write request will enter a cache first and will be flushed eventually to file at later time (like 10 seconds or so).
+
+> Yes we can use `sync` to trigger flush but it will crash this program. I'll never fix this because this is only a demo :)
 
 ```
 # dmesg | tail -20
@@ -129,7 +130,7 @@ DAMNDAMNDAMN
 [ 4964.326681] imgrement: bv #0: len 1024, offset 0, at (1026, 1027)
 [ 4964.326691] imgrement: Found DAMN from deltas 3 times
 ```
-This last 4 messages are from previous operations. We don't see any new read requests because our data is already in the cache. Discarding the cache and repeat the reading will surely trigger a read request.
+This last 4 messages are from previous operations. We don't see any new read requests because our data is already in the cache. Discarding the cache and repeat the rad operation will surely trigger a read request.
 
 ```
 # echo 3 > /proc/sys/vm/drop_caches
@@ -163,7 +164,7 @@ Last but not least, how many write request will be made if we write six (6) time
 [ 8278.755703] imgrement: bv #0: len 1024, offset 1024, at (42, 43)
 ```
 
-No write request at all! Of course, wait until quite some time when the cache is flushed.
+No write request at all! Of course, wait until quite some time until the cache is flushed.
 ```
 # dmesg | tail
 ....
@@ -179,7 +180,7 @@ No write request at all! Of course, wait until quite some time when the cache is
 ```
 Only 1 write and `DAMN` is found 21 times, the first 3 and a single batch of 18 damns.
 
-Our last trial would be creating a large file, something like 12KB. Why not MBs or GBs? Because we just want to see the pattern :)
+Our last trial would be creating a large file, something like 12KB.
 ```
 # dmesg -C
 # dd if=/dev/urandom of=/mnt/random bs=1024 count=12
@@ -206,4 +207,4 @@ La: command not found
 As usual, write request at low sector number is just updating metadata. The real meat happen at the last write request. It is consisted of 3 deltas with 4KB each.
 
 ## What next?
-You can try by yourself, deleting a document with known sector numbers and bring it back again. You can read "Understanding Linux Kernel" and "Linux Device Driver" if you wanna extend your knowledge about Linux driver and kernels.
+You can try by yourself, deleting a document with known sector numbers and bring it back again. If you want to learn further about all things Linux kernels, have a look at "Understanding Linux Kernel" and "Linux Device Driver". 
