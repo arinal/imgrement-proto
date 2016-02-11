@@ -10,3 +10,10 @@ default:
 
 clean:
 	$(MAKE) -I/usr/include -C $(KDIR) SUBDIRS=$(PWD) clean
+
+reload:
+	rmmod imgrement
+	dmesg -C
+	sync
+	echo 3 > /proc/sys/vm/drop_caches
+	insmod imgrement.ko

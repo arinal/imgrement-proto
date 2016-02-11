@@ -56,11 +56,11 @@ struct ioActivity {
         struct blockDelta *deltas;
 };
 
-static int findDamn(char *data, int len)
+static int findWordCount(char *word, char *data, int len)
 {
         int i = 0, count = 0;
         for (; i < len; ++i)
-                if (data[i] == 'D' && data[i + 1] == 'A' && data[i + 2] == 'M' && data[i + 3] == 'N') ++count;
+                count += (strnstr(data + i, word, strlen(word)) == NULL)? 0 : 1;
         return count;
 }
 
@@ -87,7 +87,7 @@ static struct ioActivity *extractActivity(struct bio *bio)
         nextSect = bio_sector(bio);
 
         bio_for_each_segment(bvec, bio, iter) {
-                int idx;
+                int count;
 
                 delta->start = nextSect;
                 delta->size = bio_iter_len(bio, iter);
@@ -96,8 +96,8 @@ static struct ioActivity *extractActivity(struct bio *bio)
                 delta->offset = bio_iter_offset(bio, iter);
 
                 data = kmap(bio_iter_page(bio, iter));
-                idx = findDamn(data, PAGE_SIZE);
-                if (idx >= 0) LOG("Found DAMN from page %d times", idx);
+                count = findWordCount("DAMN", data, PAGE_SIZE);
+                if (count > 0) LOG("Found DAMN from page %d times", count);
                 delta->data = vmalloc(delta->size);
                 _astgo(delta->data != NULL, "Error allocating delta->data", err, extract_error);
                 memcpy(delta->data, data + delta->offset, delta->size);
@@ -113,27 +113,25 @@ extract_error:
         return NULL;
 }
 
-
-
-static void freeIoa(struct ioActivity *ioActivity)
+static void freeIoa(struct ioActivity *ioa)
 {
         int i;
-        for (i = 0; i < ioActivity->deltaCount; ++i) vfree(ioActivity->deltas[i].data);
-        vfree(ioActivity->deltas);
-        vfree(ioActivity);
+        for (i = 0; i < ioa->deltaCount; ++i) vfree(ioa->deltas[i].data);
+        vfree(ioa->deltas);
+        vfree(ioa);
 }
 
-static void logActivity(struct ioActivity *ioActivity)
+static void logActivity(struct ioActivity *ioa)
 {
         int i;
-        LOG("%s, bytes to transfer: %d, delta count: %d", ioActivity->rw? "W" : "R", ioActivity->dataSize, ioActivity->deltaCount);
+        LOG("%s, bytes to transfer: %d, delta count: %d", ioa->rw? "W" : "R", ioa->dataSize, ioa->deltaCount);
 
-        for (i = 0; i < ioActivity->deltaCount; ++i) {
+        for (i = 0; i < ioa->deltaCount; ++i) {
                 int count;
-                struct blockDelta *delta = &ioActivity->deltas[i];
+                struct blockDelta *delta = &ioa->deltas[i];
                 LOG("bv #%d: len %d, offset %d, at (%d, %d)", i, delta->size, delta->offset, delta->start, delta->end);
-                count = findDamn(delta->data, delta->size);
-                if (count >= 0) LOG("Found DAMN from deltas %d times", count);
+                count = findWordCount("DAMN", delta->data, delta->size);
+                if (count > 0) LOG("Found DAMN from deltas %d times", count);
         }
 }
 
@@ -162,10 +160,8 @@ static void imgrementExit(void)
 
 static int __init imgrementInit(void)
 {
-        char* err = NULL;
+        char* err;
         struct imgrementDevice *dev;
-
-        LOG("Initializing..");
 
         imgrementDevice = kzalloc(sizeof(struct imgrementDevice), GFP_KERNEL);
         _astgo(imgrementDevice != NULL, "Error allocating", err, init_error);
@@ -183,7 +179,6 @@ static int __init imgrementInit(void)
         dev->baseQueue->make_request_fn = traceRequestFn;
 
         LOG("%s trace initialization succeeded", dev->baseDev->bd_disk->disk_name);
-
         return 0;
 
 init_error:
