@@ -1,10 +1,10 @@
-# imgrement proto - A kernel daemon for tracing your disk's I/O requests
+# imgrement proto - kernel daemon for tracing your disk's I/O requests
 A simple kernel module to intercept all requests targeted at your disk device. Yeah.. it can literally catch all requests. This program map I/O information provided by kernel data structures into our own structures and show the information afterwards. The expected informations are sector number and data size. As you may have been thinking, we can show the information directly from kernel data structures without mapping it. The mapping part is meant to be a showcase only. 
 
 ## Getting started
 This program can only be executed on Linux because it is a Linux kernel module. Even if you have different kernel version, it won't run unless you recompile it with matching version. Compilation has to be done on Linux as well. Well, if you know how to do it outside Linux, I would love to hear it.
 
-It has already worked properly on Ubuntu. Windows or Mac users? Don't worry, you can still use virtual machines. To make your life easier, we've configured `Vagrantfile` which can create a VM with additional disk device to our tracer. Currently, the vagrant configuration is only work with Virtual Box provider.
+It has already worked properly on Ubuntu. Windows or Mac users? Don't worry, you can still use virtual machines. To make your life easier, we've configured `Vagrantfile` which can create a VM with additional disk device to our tracer. The vagrant configuration only work with Virtual Box provider.
 
 ## Prerequisites
 - Linux machine
@@ -33,7 +33,7 @@ root@ubuntu:/home/vagrant# cd /vagrant
 root@ubuntu:/vagrant#
 ```
 
-Note that this folder is synced with our hosts machine (your real PC, not virtual). Let's validate it by listing the files
+Note that this folder is synced with our hosts machine e.g. your real PC, not virtual. Let's validate it by listing the files
 ```
 root:/vagrant# ls
 imgrement.c  Makefile  provision.sh  README.md  Vagrantfile
@@ -44,7 +44,7 @@ Validated, those files are our sources! Compile it using make.
 root:/vagrant# make
 ```
 
-After the compilation succeed, there will be several files
+After the compilation succeed, there will be several files generated
 ```
 root@ubuntu:/vagrant# ls
 imgrement.c      imgrement.mod.o  modules.order   README.md
@@ -52,7 +52,7 @@ imgrement.ko     imgrement.o      Module.symvers  Vagrantfile
 imgrement.mod.c  Makefile         provision.sh
 ```
 
-The most important file is `imgrement.ko`. It is the so called kernel module (`ko` is kernel object). We can install this module into the kernel by using `insmod`. Before we use it, let's see what the vagrant file had configured for us.
+The most important file is `imgrement.ko`. It is the so called kernel module, and yes, `ko` is actually kernel object. We can install this module into the kernel by using `insmod` but before we use it, let's see what the vagrant file had configured for us. Let's see what disk already been attached.
 ```
 root@ubuntu:/vagrant# lsblk
 NAME   MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
@@ -61,7 +61,7 @@ sda      8:0    0  40G  0 disk
 sdb      8:16   0   4M  0 disk /mnt
 ```
 
-There is a device called `sdb` mounted on `/mnt`. For simplicity, `imgrement` is hard coded to trace a device named `sdb`. So, to trigger our hook, we have to make an I/O request to `sdb`. Translated to human language, we have to perform read file operations (`ls`, `cat`) or write file operations (`rm`, `touch`, `echo`) inside `/mnt`.
+There is a device called `sdb` mounted on `/mnt`. For simplicity, `imgrement` is hard coded to trace a device named `sdb`. That being said, we have to make an I/O request to `sdb` to trigger our hook. Translated to human language, we have to perform read file operations (`ls`, `cat`) or write file operations (`rm`, `touch`, `echo`) inside `/mnt`.
 
 Now let's clear kernel ring buffer and install our module.
 ```
@@ -92,7 +92,7 @@ Write some text to some file inside `/mnt` to initiate write I/O request.
 
 We can detect an `R` or read activity in `sdb`. Because `sdb` is formatted with 1024 bytes block size, every I/O request has 1024 size. Note that the number of sector is always two as in `(296, 297), (38, 39), (36, 37)`. It is because our disk sector size is 512 bytes so each request contains 2 sectors.
 
-Why all of those activities are read? Did we just write `DAMN` to a file? Kernel employs a delayed writing, every write request will enter a cache first. After Waiting for 10 seconds or so, all the delayed writing will be flushed.
+Why all of those activities are reads? Did we just write `DAMN` to a file? Kernel employs a delayed writing, every write request will enter a cache first and after 10 seconds or so, all the delayed writing will be flushed.
 > Yes we can use `sync` to trigger flush. But this program will crash because of it. I'll never fix this because this is only a demo :)
 
 ```
@@ -129,7 +129,7 @@ DAMNDAMNDAMN
 [ 4964.326681] imgrement: bv #0: len 1024, offset 0, at (1026, 1027)
 [ 4964.326691] imgrement: Found DAMN from deltas 3 times
 ```
-This last 4 messages are from previous operations. We don't see any read requests because our data is already in the cache. Discarding the cache and reading will surely trigger a read request.
+This last 4 messages are from previous operations. We don't see any new read requests because our data is already in the cache. Discarding the cache and repeat the reading will surely trigger a read request.
 
 ```
 # echo 3 > /proc/sys/vm/drop_caches
@@ -141,7 +141,7 @@ DAMNDAMNDAMN
 [ 7326.931556] imgrement: bv #0: len 1024, offset 0, at (1026, 1027)
 ```
 
-See? By reading `/mnt/damn` we are creating a request to sector 1026, the same sector with our last write request.
+See? By reading `/mnt/damn` we are creating a read request to sector 1026, the same sector with our last write request.
 
 Last but not least, how many write request will be made if we write six (6) times?
 ```
@@ -206,4 +206,4 @@ La: command not found
 As usual, write request at low sector number is just updating metadata. The real meat happen at the last write request. It is consisted of 3 deltas with 4KB each.
 
 ## What next?
-You can try by yourself, deleting a document with known sector numbers and bring it back again. You can read Understanding Linux Kernel and Linux Device Driver if you wanna extend your knowledge.
+You can try by yourself, deleting a document with known sector numbers and bring it back again. You can read "Understanding Linux Kernel" and "Linux Device Driver" if you wanna extend your knowledge about Linux driver and kernels.
