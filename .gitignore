@@ -7,6 +7,9 @@
 Module.symvers
 modules.order
 
+# File indexes
+cscope.*
+
 # Created by https://www.gitignore.io/api/c
 
 ### C ###

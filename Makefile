@@ -1,4 +1,5 @@
 obj-m := imgrement.o
+imgrement-objs := main.o ioa.o
 
 KERNELVERSION = $(shell uname -r)
 KDIR := /lib/modules/$(KERNELVERSION)/build
