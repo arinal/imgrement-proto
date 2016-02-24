@@ -21,8 +21,7 @@
     goto addr;                                  \
   }
 
-inline void ast_vfree(void *ptr);
-
+inline void ast_vfree(const void *ptr);
 int find_word_count(const char *word, const char *data, const int len);
 
 #endif /* COMMON_H */

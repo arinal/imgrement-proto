@@ -86,11 +86,14 @@ struct io_activity *create_ioa(struct bio *bio)
         ioa->data_size = bio_size(bio);
         ioa->delta_count = bio_cnt(bio);
 
-        ioa->deltas = vmalloc(ioa->delta_count * sizeof(struct block_delta));
-        _astgo(ioa->deltas != NULL, "Error allocating deltas", err, create_ioa_error);
+        if (ioa->delta_count != 0) {
+                ioa->deltas = vmalloc(ioa->delta_count * sizeof(struct block_delta));
+                _astgo(ioa->deltas != NULL, "Error allocating deltas", err, create_ioa_error);
+        } else ioa->deltas = NULL;
+
         return ioa;
 
- create_ioa_error:
+create_ioa_error:
         LOG_VAR(err);
         LOG("Error creating ioa from bio with: %lu sector, %d size", bio_sector(bio), bio_size(bio));
         ast_vfree(ioa->deltas);
@@ -113,7 +116,7 @@ struct io_activity *extract_ioa(struct bio *bio)
 
         bio_for_each_segment(bvec, bio, iter) {
                 next_sector = fill_delta(delta, bio, iter, next_sector);
-                _astgo(next_sector >= 0, "Error allocating delta->data", err, extract_error);
+                _astgo(next_sector >= 0, "Error filling delta->data", err, extract_error);
                 delta++;
         }
 
@@ -127,7 +130,7 @@ extract_error:
 void free_ioa(const struct io_activity *ioa)
 {
         int i;
-        for (i = 0; i < ioa->delta_count; ++i) vfree(ioa->deltas[i].data);
-        vfree(ioa->deltas);
-        vfree(ioa);
+        for (i = 0; i < ioa->delta_count; ++i) ast_vfree(ioa->deltas[i].data);
+        ast_vfree(ioa->deltas);
+        ast_vfree(ioa);
 }

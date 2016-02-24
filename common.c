@@ -1,6 +1,6 @@
 #include "common.h"
 
-inline void ast_vfree(void *ptr)
+inline void ast_vfree(const void *ptr)
 {
         if (ptr != NULL) vfree(ptr);
 }
