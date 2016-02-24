@@ -2,8 +2,6 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <linux/module.h>
-#include <linux/blkdev.h>
 #include "defines.h"
 
 #ifndef LOG_LABEL
@@ -22,5 +20,9 @@
     err = msg;                                  \
     goto addr;                                  \
   }
+
+inline void ast_vfree(void *ptr);
+
+int find_word_count(const char *word, const char *data, const int len);
 
 #endif /* COMMON_H */

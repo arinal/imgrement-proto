@@ -1,5 +1,5 @@
 obj-m := imgrement.o
-imgrement-objs := main.o ioa.o
+imgrement-objs := main.o ioa.o common.o
 
 KERNELVERSION = $(shell uname -r)
 KDIR := /lib/modules/$(KERNELVERSION)/build
@@ -13,8 +13,7 @@ clean:
 	$(MAKE) -I/usr/include -C $(KDIR) SUBDIRS=$(PWD) clean
 
 reload:
-	rmmod imgrement
-	dmesg -C
-	sync
-	echo 3 > /proc/sys/vm/drop_caches
-	insmod imgrement.ko
+	rmmod imgrement 2>/dev/null || :
+	dmesg -C && sync && echo 3 > /proc/sys/vm/drop_caches && insmod imgrement.ko
+
+.PHONY: default clean reload
