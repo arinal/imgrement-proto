@@ -7,10 +7,10 @@ PWD := $(shell pwd)
 EXTRA_CFLAGS := -g
 
 default:
-	$(MAKE) -I/usr/include -C $(KDIR) SUBDIRS=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
 clean:
-	$(MAKE) -I/usr/include -C $(KDIR) SUBDIRS=$(PWD) clean
+	$(MAKE) -C $(KDIR) M=$(PWD) clean
 
 reload:
 	rmmod imgrement 2>/dev/null || :
