@@ -1,10 +1,17 @@
 obj-m := imgrement.o
-imgrement-objs := src/main.o src/ioa.o src/common.o
 
 KERNELVERSION = $(shell uname -r)
 KDIR := /lib/modules/$(KERNELVERSION)/build
 PWD := $(shell pwd)
 EXTRA_CFLAGS := -g -I$(PWD)/src
+
+# Determine kernel version and include appropriate init file
+KERNEL_MAJOR := $(shell echo $(KERNELVERSION) | cut -d. -f1)
+ifeq ($(shell test $(KERNEL_MAJOR) -ge 6 && echo yes),yes)
+    imgrement-objs := src/main.o src/ioa.o src/common.o src/init_kernel6.o
+else
+    imgrement-objs := src/main.o src/ioa.o src/common.o src/init_kernel3.o
+endif
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules

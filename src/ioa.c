@@ -140,8 +140,8 @@ struct io_activity *create_ioa(struct bio *bio)
 
 create_ioa_error:
     LOG_VAR(err);
-    LOG("Error creating ioa from bio with: %lu sector, %d size",
-        bio_sector(bio), bio_size(bio));
+    LOG("Error creating ioa from bio with: %llu sector, %d size",
+        (unsigned long long)bio_sector(bio), bio_size(bio));
     ast_vfree(ioa->deltas);
     ast_vfree(ioa);
     return NULL;
