@@ -6,7 +6,7 @@ A lightweight Linux kernel module for intercepting and analyzing disk I/O reques
 
 - [Overview](#overview)
 - [Features](#features)
-- [Quick Start](#quick-start)
+- [Quick Start](#quick-start) - See [docs/getting-started.md](docs/getting-started.md) for detailed guide
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
   - [Using Vagrant (Recommended for Testing)](#using-vagrant-recommended-for-testing)
@@ -20,6 +20,7 @@ A lightweight Linux kernel module for intercepting and analyzing disk I/O reques
   - [Multiple Write Operations](#multiple-write-operations)
 - [Understanding the Output](#understanding-the-output)
 - [Troubleshooting](#troubleshooting)
+- [Learning Resources](#learning-resources)
 - [What Next?](#what-next)
 
 ## Overview
@@ -46,47 +47,40 @@ The module extracts I/O metadata from kernel `bio` structures, including sector 
 
 ## Quick Start
 
-**For testing with Vagrant:**
+⚠️ **Safety First:** This module intercepts I/O on a real block device. See **[docs/getting-started.md](docs/getting-started.md)** for safe testing methods.
+
+**Safest method - Loopback device (virtual disk):**
 
 ```bash
-# Clone and start VM with pre-configured disk
-git clone https://github.com/arinal/imgrement-proto.git
-cd imgrement-proto
-vagrant up
+# Create 100MB virtual disk
+dd if=/dev/zero of=/tmp/test_disk.img bs=1M count=100
+sudo losetup -fP /tmp/test_disk.img
 
-# SSH into VM
-vagrant ssh
-sudo su
-cd /vagrant
+# Configure module to trace it (edit src/defines.h line 8)
+# Change DEVICE_FILE_PATH to "/dev/loop0"
 
-# Build and load module
+# Build and test
 make
+sudo insmod imgrement.ko
+echo 'test' | sudo tee /mnt/test.txt
+sync && dmesg
+```
+
+**Alternative - Vagrant VM (completely isolated):**
+
+```bash
+vagrant up && vagrant ssh
+cd /vagrant
 make reload
-
-# Generate I/O activity
 echo 'test data' > /mnt/testfile
-
-# View traced I/O
 dmesg | tail -20
 ```
 
-**For native Linux (kernel 3.x - 6.x):**
-
-```bash
-# Check kernel version
-uname -r  # Works on 3.x, 4.x, 5.x, and 6.x
-
-# Build module
-make
-
-# Load module (requires root)
-sudo insmod imgrement.ko
-
-# Monitor kernel logs
-dmesg | tail -f
-```
-
-**Note:** The module automatically detects your kernel version and uses the appropriate APIs.
+📖 **See [docs/getting-started.md](docs/getting-started.md) for complete step-by-step instructions including:**
+- Vagrant VM setup (safest)
+- Loopback device method (safe virtual disk)
+- Native installation (requires spare disk)
+- Understanding output and troubleshooting
 
 ## Prerequisites
 
@@ -110,11 +104,18 @@ Install on Fedora/RHEL:
 sudo dnf install gcc make kernel-devel
 ```
 
+Install on Arch Linux:
+```bash
+sudo pacman -S base-devel linux-headers
+```
+
 ### For Vagrant Setup
 - [Vagrant](https://www.vagrantup.com/downloads)
 - [VirtualBox](https://www.virtualbox.org/wiki/Downloads)
 
 The Vagrant configuration automatically provisions a VM with an additional 4MB disk device at `/dev/sdb`.
+
+📖 **For detailed installation instructions, see [docs/getting-started.md](docs/getting-started.md)**
 
 ## Installation
 
@@ -217,25 +218,25 @@ make reload  # Removes old module, clears logs, reinstalls
 
 ### Data Flow
 
-1. **Initialization** (main.c:54-84):
+1. **Initialization** (src/main.c:54-84):
    - Register as a block device driver
    - Open target device (`/dev/sdb`)
    - Save original `make_request_fn` pointer
    - Replace with `trace_request_fn`
 
-2. **Interception** (main.c:35-41):
+2. **Interception** (src/main.c:35-41):
    - `trace_request_fn` receives every I/O request
    - Extract metadata using `extract_ioa()`
    - Log operation details
    - Forward to original handler
 
-3. **Data Extraction** (ioa.c):
+3. **Data Extraction** (src/ioa.c):
    - Parse `struct bio` into `struct io_activity`
    - Extract bio vectors (segments)
    - Copy data from page buffers
    - Calculate sector and block ranges
 
-4. **Cleanup** (main.c:43-52):
+4. **Cleanup** (src/main.c:43-52):
    - Restore original `make_request_fn`
    - Unregister block device
    - Free allocated memory
@@ -269,7 +270,7 @@ struct block_delta {
 
 By default, `imgrement` traces `/dev/sdb`. To monitor a different device:
 
-1. Open `defines.h` in your editor
+1. Open `src/defines.h` in your editor
 2. Modify line 8:
    ```c
    #define DEVICE_FILE_PATH "/dev/sdb"  // Change this
@@ -289,13 +290,13 @@ By default, `imgrement` traces `/dev/sdb`. To monitor a different device:
 
 ### Other Configuration Options
 
-**Sector size** (defines.h:10):
+**Sector size** (src/defines.h:10):
 ```c
 #define SECTOR_SIZE 512  // Standard sector size
 ```
 Most modern systems use 512-byte sectors. Change only if your hardware requires it.
 
-**Module name** (defines.h:7):
+**Module name** (src/defines.h:7):
 ```c
 #define DRIVER_NAME "imgrement"
 ```
@@ -303,389 +304,61 @@ Used in kernel logs and module identification.
 
 ## Usage Examples
 
-All examples assume you're running in the VM (`vagrant ssh && sudo su && cd /vagrant`) or as root on native Linux.
-
-### Basic Write Operation
-
-Let's trace a simple file write:
+Basic I/O tracing:
 
 ```bash
-# Clear kernel log and ensure module is loaded
-dmesg -C
-make reload
-
-# Write to a file on the traced device
-echo 'DAMNDAMNDAMN' > /mnt/damn
-
-# View logs (you'll see READ operations)
-dmesg | tail
-```
-
-Output:
-```
-[ 4934.291668] imgrement: R, bytes to transfer: 1024, delta count: 1
-[ 4934.291672] imgrement: bv #0: len 1024, offset 0, 2 sectors (296..297) or 1 blocks (148..148)
-```
-
-**Why READ operations?** The kernel caches writes and performs reads for metadata updates. To see the actual write:
-
-```bash
-# Wait 10 seconds for kernel to flush, or use sync
+# Write a file and trace it
+echo 'test data' > /mnt/testfile
 sync
-
-# Now check logs
 dmesg | tail
 ```
 
-Output:
+Example output:
 ```
-[ 4964.326233] imgrement: W, bytes to transfer: 1024, delta count: 1
-[ 4964.326238] imgrement: bv #0: len 1024, offset 1024, 2 sectors (2..3) or 1 blocks (1..1)
-[ 4964.326678] imgrement: Found DAMN from page 3 times
-```
-
-### Understanding Cache Behavior
-
-The kernel's page cache affects what I/O operations you see:
-
-**Writes are delayed:**
-```bash
-dmesg -C
-echo 'test' > /mnt/file1
-dmesg | tail  # Shows reads (metadata), no write yet
-
-sync          # Force flush
-dmesg | tail  # Now shows write
+[ 1234.567] imgrement: W, bytes to transfer: 1024, delta count: 1
+[ 1234.568] imgrement: bv #0: len 1024, offset 0, 2 sectors (100..101) or 1 blocks (50..50)
 ```
 
-**Reads are cached:**
-```bash
-dmesg -C
-cat /mnt/file1            # First read - hits disk
-dmesg | tail              # Shows read operation
-
-cat /mnt/file1            # Second read - from cache
-dmesg | tail              # No new entries!
-
-# Drop cache to force disk read
-echo 3 > /proc/sys/vm/drop_caches
-cat /mnt/file1            # Reads from disk again
-dmesg | tail              # Shows read operation
-```
-
-### Working with Large Files
-
-Large files are split into multiple bio vectors (deltas):
-
-```bash
-dmesg -C
-
-# Create 12KB file
-dd if=/dev/urandom of=/mnt/random bs=1024 count=12
-
-# Wait for flush
-sync
-
-# View traced I/O
-dmesg | tail -20
-```
-
-Output shows multiple metadata writes followed by the actual data:
-```
-[  675.332183] imgrement: W, bytes to transfer: 12288, delta count: 3
-[  675.332187] imgrement: bv #0: len 4096, offset 0, 8 sectors (6154..6161) or 4 blocks (3077..3080)
-[  675.332222] imgrement: bv #1: len 4096, offset 0, 8 sectors (6162..6169) or 4 blocks (3081..3084)
-[  675.332258] imgrement: bv #2: len 4096, offset 0, 8 sectors (6170..6177) or 4 blocks (3085..3088)
-```
-
-The 12KB write is split into 3 deltas of 4KB each.
-
-### Multiple Write Operations
-
-Multiple writes to the same file are often batched:
-
-```bash
-dmesg -C
-
-# Write 6 times
-echo 'DAMNDAMNDAMN' >> /mnt/damn
-echo 'DAMNDAMNDAMN' >> /mnt/damn
-echo 'DAMNDAMNDAMN' >> /mnt/damn
-echo 'DAMNDAMNDAMN' >> /mnt/damn
-echo 'DAMNDAMNDAMN' >> /mnt/damn
-echo 'DAMNDAMNDAMN' >> /mnt/damn
-
-dmesg | tail  # Shows only reads (metadata)
-
-sync          # Flush writes
-
-dmesg | tail
-```
-
-Output:
-```
-[ 8308.791450] imgrement: W, bytes to transfer: 1024, delta count: 1
-[ 8308.791589] imgrement: Found DAMN from page 21 times
-[ 8308.791604] imgrement: Found DAMN from deltas 21 times
-```
-
-The 6 writes (18 "DAMN"s) plus previous 3 = 21 total, batched into a single I/O request.
+📖 **See [docs/getting-started.md](docs/getting-started.md) for detailed examples including cache behavior, large files, and advanced usage.**
 
 ## Understanding the Output
 
-The module logs I/O operations to the kernel ring buffer (viewable with `dmesg`):
-
-### Output Format
-
-**Summary line:**
+Output format:
 ```
 imgrement: R/W, bytes to transfer: <size>, delta count: <n>
-```
-- `R` = read, `W` = write
-- `bytes to transfer` = total size of the I/O operation
-- `delta count` = number of bio vectors (segments)
-
-**Per-segment details:**
-```
 imgrement: bv #<i>: len <bytes>, offset <offset>, <sectors> sectors (<start>..<end>) or <blocks> blocks (<start>..<end>)
 ```
-- `bv #i` = bio vector number (0-indexed)
-- `len` = segment size in bytes
-- `offset` = offset within the page (0-4095)
-- `sectors` = number of 512-byte sectors
-- `(start..end)` = sector or block range on disk
 
-### Example Analysis
+- **R/W**: Read or Write operation
+- **bytes to transfer**: Total I/O size
+- **delta count**: Number of bio vector segments
+- **bv #i**: Bio vector index
+- **sectors/blocks**: Disk location
 
-```
-[ 4934.291668] imgrement: R, bytes to transfer: 1024, delta count: 1
-[ 4934.291672] imgrement: bv #0: len 1024, offset 0, 2 sectors (296..297) or 1 blocks (148..148)
-```
+📖 **See [docs/getting-started.md](docs/getting-started.md) for detailed output analysis and examples.**
 
-This indicates:
-- **Operation:** Read (`R`)
-- **Size:** 1024 bytes (1KB)
-- **Segments:** 1 bio vector
-- **Location:** Sectors 296-297 (2 sectors × 512 bytes = 1024 bytes)
-- **Block:** Block 148 (1024-byte blocks, so sectors 296-297 = block 148)
-- **Alignment:** offset 0 means page-aligned
+## Documentation
 
-```
-[ 4964.326238] imgrement: bv #0: len 1024, offset 1024, 2 sectors (2..3) or 1 blocks (1..1)
-```
-
-This shows:
-- **Operation:** Part of a write (W in summary line)
-- **Offset:** 1024 bytes into the page (second 1KB of a page)
-- **Location:** Sectors 2-3, block 1 (near start of disk = metadata)
-
-## Troubleshooting
-
-### Module fails to compile
-
-**Symptom:** `make` returns errors about missing headers or incompatible types.
-
-**Causes & Solutions:**
-
-1. **Missing kernel headers:**
-   ```bash
-   # Check headers exist
-   ls /lib/modules/$(uname -r)/build
-
-   # Install if missing
-   sudo apt-get install linux-headers-$(uname -r)  # Ubuntu/Debian
-   sudo dnf install kernel-devel                   # Fedora/RHEL
-   ```
-
-2. **Kernel version mismatch:**
-   - You must compile against the exact kernel version you're running
-   - Check versions match:
-     ```bash
-     uname -r                                  # Running kernel
-     ls /lib/modules/                          # Available headers
-     ```
-
-3. **Compiler version issues:**
-   - Ensure GCC version is compatible with your kernel
-   ```bash
-   gcc --version
-   ```
-
-### Module fails to load (insmod error)
-
-**Symptom:** `insmod imgrement.ko` returns an error.
-
-**Causes & Solutions:**
-
-1. **Target device not found:**
-   ```bash
-   # Check if /dev/sdb exists
-   lsblk
-
-   # If not, either:
-   # - Add a disk to your system, or
-   # - Change DEVICE_FILE_PATH in defines.h to an existing device
-   ```
-
-2. **Kernel version mismatch:**
-   ```bash
-   # Error: "Invalid module format" or "version magic"
-   # Solution: Recompile against running kernel headers
-   make clean
-   make
-   ```
-
-3. **Permission denied:**
-   ```bash
-   # Must run as root
-   sudo insmod imgrement.ko
-   ```
-
-4. **Module already loaded:**
-   ```bash
-   # Check if already loaded
-   lsmod | grep imgrement
-
-   # Remove if needed
-   sudo rmmod imgrement
-   ```
-
-### No output in dmesg
-
-**Symptom:** Module loads successfully but `dmesg` shows no I/O traces.
-
-**Causes & Solutions:**
-
-1. **Wrong device:**
-   - Ensure you're performing I/O on the correct device
-   - Default is `/dev/sdb` mounted at `/mnt`
-   ```bash
-   lsblk                    # Check device and mount point
-   cat /proc/mounts         # Verify /dev/sdb is mounted
-   ```
-
-2. **Cache hiding I/O:**
-   - Writes are delayed; reads come from cache
-   ```bash
-   # Force write flush
-   sync
-
-   # Force read from disk (drop cache)
-   echo 3 > /proc/sys/vm/drop_caches
-   ```
-
-3. **Module not fully loaded:**
-   ```bash
-   # Check module status
-   dmesg | grep imgrement
-
-   # Should see: "imgrement: sdb trace initialization succeeded"
-   # If not, check module_init ran successfully
-   ```
-
-4. **Log level filtering:**
-   ```bash
-   # Ensure kernel debug messages are visible
-   dmesg -n 8              # Set console log level
-   ```
-
-### Module causes kernel crash or hang
-
-**Symptom:** System becomes unresponsive after loading module.
-
-**Prevention:**
-- Always test in a VM first
-- Ensure target device has no important data
-- Use `make reload` for iteration (clears state)
-
-**Recovery:**
-- If in VM: restart VM (`vagrant reload`)
-- If native: reboot system, module won't auto-load
-
-**Debugging:**
-- Check kernel logs after reboot: `journalctl -k | grep imgrement`
-- Review code for null pointer dereferences or memory issues
-
-### Compilation warnings
-
-**Symptom:** Module compiles but shows warnings about deprecated functions.
-
-**Solution:** This is normal for kernel modules due to evolving APIs. As long as the module loads and works, these can be safely ignored. The `HAVE_BVEC_ITER` macro handles most compatibility issues.
-
-### Compilation succeeds but with warnings
-
-**Symptom:** Module compiles successfully but shows some warnings.
-
-**Common warnings:**
-- `warning: no previous prototype for 'log_ioa'` - This is safe to ignore, log_ioa is an internal function
-- `warning: format '%lu' expects argument of type 'long unsigned int'` - Minor format string mismatch, does not affect functionality
-
-**Solution:** These warnings are cosmetic and do not affect the module's functionality. The module will work correctly despite these warnings.
-
-### "Found DAMN from page" messages
-
-**Symptom:** Seeing word count messages in logs.
-
-**Explanation:** This is a demo feature showing data inspection capabilities. The module searches for the word "DAMN" in I/O data (see common.c:find_word_count). You can remove this feature or modify it to search for other patterns.
+- **[docs/getting-started.md](docs/getting-started.md)** - Step-by-step guide for safe testing, troubleshooting, and detailed examples
+- **[docs/block-io-basics.md](docs/block-io-basics.md)** - Linux kernel block I/O fundamentals and how imgrement works
 
 ## What Next?
 
-### Learning Resources
+**Extend the module:**
+- Add filtering by operation type (read/write only)
+- Track I/O statistics and latency
+- Export data via `/proc` or `/sys`
+- Support multiple devices simultaneously
 
-**Kernel development books:**
-- "Linux Device Drivers" by Jonathan Corbet, Alessandro Rubini, and Greg Kroah-Hartman
-- "Understanding the Linux Kernel" by Daniel P. Bovet and Marco Cesati
+**Learn more:**
+- Read [docs/block-io-basics.md](docs/block-io-basics.md) for kernel internals
+- Experiment with different filesystems (ext4, xfs, btrfs)
+- Study cache behavior and access patterns
+- Check CLAUDE.md for developer guide and API reference
+
+**Recommended books:**
+- "Linux Device Drivers" by Corbet, Rubini, Kroah-Hartman
 - "Linux Kernel Development" by Robert Love
-
-**Online resources:**
-- [Linux Kernel Documentation](https://www.kernel.org/doc/html/latest/)
-- [The Linux Kernel Module Programming Guide](https://sysprog21.github.io/lkmpg/)
-- [Block Layer Documentation](https://www.kernel.org/doc/html/latest/block/index.html)
-
-### Project Extensions
-
-**Easy:**
-- Modify word search to find other patterns
-- Add filtering by operation type (read-only or write-only mode)
-- Change target device and experiment with different filesystems
-- Log statistics (total bytes read/written, operation counts)
-
-**Intermediate:**
-- Add timestamps to I/O operations
-- Track I/O latency (time between request and completion)
-- Export statistics via `/proc` or `/sys` interface
-- Add runtime configuration (change target device without recompiling)
-- Implement filtering by sector range
-
-**Advanced:**
-- Support tracing multiple devices simultaneously
-- Implement a userspace daemon to parse and visualize I/O patterns
-- Add performance counters and profiling
-- Integrate with tracing frameworks (ftrace, eBPF)
-- Build a file recovery tool using sector information
-
-### Contributing
-
-Contributions are welcome! This is an educational project, so enhancements that improve learning value are especially appreciated.
-
-### Experiments to Try
-
-1. **Compare filesystem behaviors:**
-   - Format `/dev/sdb` with different filesystems (ext4, xfs, btrfs)
-   - Observe how each handles I/O differently
-
-2. **Analyze access patterns:**
-   - Create sequential vs random I/O workloads
-   - Observe how the kernel merges and reorders requests
-
-3. **Study cache effectiveness:**
-   - Measure cache hit rates for different workloads
-   - Experiment with different cache drop scenarios
-
-4. **Sector-level forensics:**
-   - Delete a file and note its sectors
-   - Attempt to locate the data before it's overwritten
-   - Study how filesystems reuse freed blocks
 
 ---
 

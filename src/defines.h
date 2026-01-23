@@ -47,10 +47,13 @@
 /**
  * SECTOR_SIZE - Standard disk sector size in bytes
  *
- * Note: We use the kernel's definition from linux/blk_types.h (512 bytes).
- * Do not redefine this constant as it conflicts with kernel headers.
- * The kernel defines: #define SECTOR_SIZE (1 << SECTOR_SHIFT)
+ * The standard sector size is 512 bytes. Some newer kernels define this
+ * in linux/blk_types.h, but older kernels (like 3.13) don't expose it.
+ * We define it here to ensure compatibility across kernel versions.
  */
+#ifndef SECTOR_SIZE
+#define SECTOR_SIZE 512
+#endif
 
 /**
  * LOG_LABEL - Prefix for kernel log messages

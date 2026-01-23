@@ -45,7 +45,7 @@
  *   LOG("Processing %d bytes at sector %d", size, sector);
  *   // Output: "imgrement: Processing 1024 bytes at sector 42"
  */
-#define LOG(fmt, args...) printk(KERN_DEBUG LOG_LABEL_FMT fmt "\n", ## args)
+#define LOG(fmt, args...) printk(KERN_DEBUG LOG_LABEL_FMT fmt "\n", ##args)
 
 /**
  * LOG_VAR - Log a simple string variable
@@ -83,11 +83,11 @@
  * Note: This is an internal macro. Consider using standard kernel error
  * handling patterns (IS_ERR, PTR_ERR, etc.) for new code.
  */
-#define _astgo(expr, msg, err, addr)            \
-  if (!(expr)) {                                \
-    err = msg;                                  \
-    goto addr;                                  \
-  }
+#define _astgo(expr, msg, err, addr)                                           \
+    if (!(expr)) {                                                             \
+        err = msg;                                                             \
+        goto addr;                                                             \
+    }
 
 /**
  * ast_vfree - Safe wrapper around vfree

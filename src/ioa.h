@@ -28,11 +28,11 @@
  * and must be freed when the block_delta is no longer needed.
  */
 struct block_delta {
-        int start_sector;
-        int end_sector;
-        int size;
-        int offset;
-        char *data;
+    int start_sector;
+    int end_sector;
+    int size;
+    int offset;
+    char *data;
 };
 
 /**
@@ -116,10 +116,10 @@ inline int get_sectors_count(const struct block_delta *delta);
  *   }
  */
 struct io_activity {
-        char rw;
-        int data_size;
-        int delta_count;
-        struct block_delta *deltas;
+    char rw;
+    int data_size;
+    int delta_count;
+    struct block_delta *deltas;
 };
 
 /**
