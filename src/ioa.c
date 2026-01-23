@@ -35,19 +35,19 @@ typedef struct bio_vec bio_vec;
 #define bio_cnt(bio) bio_segments(bio)
 #endif
 
-inline int get_block_sector_ratio(const struct block_delta *delta)
+inline int get_block_sector_ratio(void)
 {
     return IMGREMENT_BLOCK_SIZE / SECTOR_SIZE;
 }
 
 inline int get_start_block(const struct block_delta *delta)
 {
-    return delta->start_sector / get_block_sector_ratio(delta);
+    return delta->start_sector / get_block_sector_ratio();
 }
 
 inline int get_end_block(const struct block_delta *delta)
 {
-    return delta->end_sector / get_block_sector_ratio(delta);
+    return delta->end_sector / get_block_sector_ratio();
 }
 
 inline int get_blocks_count(const struct block_delta *delta)

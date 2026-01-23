@@ -10,6 +10,9 @@ modules.order
 # File indexes
 cscope.*
 
+# LSP
+compile_commands.json
+
 # Created by https://www.gitignore.io/api/c
 
 ### C ###
@@ -18,6 +21,7 @@ cscope.*
 *.ko
 *.obj
 *.elf
+*.mod
 
 # Precompiled Headers
 *.gch

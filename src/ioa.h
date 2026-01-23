@@ -37,14 +37,14 @@ struct block_delta {
 
 /**
  * get_block_sector_ratio - Calculate sectors per block
- * @delta: Pointer to block_delta structure
  *
  * Returns the ratio of block size to sector size. For standard configurations
  * with 1KB blocks and 512-byte sectors, this returns 2.
+ * This is a constant value determined by IMGREMENT_BLOCK_SIZE and SECTOR_SIZE.
  *
  * Return: Number of sectors that make up one block
  */
-inline int get_block_sector_ratio(const struct block_delta *delta);
+inline int get_block_sector_ratio(void);
 
 /**
  * get_start_block - Get starting block number

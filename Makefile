@@ -19,4 +19,7 @@ reload:
 format:
 	clang-format -i src/*.c src/*.h
 
+compile_commands.json:
+	bear -- $(MAKE)
+
 .PHONY: default clean reload format

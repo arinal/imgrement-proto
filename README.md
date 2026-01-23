@@ -19,8 +19,10 @@ A lightweight Linux kernel module for intercepting and analyzing disk I/O reques
   - [Working with Large Files](#working-with-large-files)
   - [Multiple Write Operations](#multiple-write-operations)
 - [Understanding the Output](#understanding-the-output)
-- [Troubleshooting](#troubleshooting)
-- [Learning Resources](#learning-resources)
+- [Documentation](#documentation)
+- [Development Setup](#development-setup)
+  - [LSP Support](#lsp-support-clangd-ccls)
+  - [Code Formatting](#code-formatting)
 - [What Next?](#what-next)
 
 ## Overview
@@ -341,6 +343,38 @@ imgrement: bv #<i>: len <bytes>, offset <offset>, <sectors> sectors (<start>..<e
 
 - **[docs/getting-started.md](docs/getting-started.md)** - Step-by-step guide for safe testing, troubleshooting, and detailed examples
 - **[docs/block-io-basics.md](docs/block-io-basics.md)** - Linux kernel block I/O fundamentals and how imgrement works
+
+## Development Setup
+
+### LSP Support (clangd, ccls)
+
+For code navigation, autocomplete, and diagnostics in your editor:
+
+```bash
+# Install bear (Arch Linux)
+sudo pacman -S bear
+
+# Generate compile_commands.json
+make compile_commands.json
+```
+
+Your LSP server (clangd, ccls) will automatically pick up `compile_commands.json` and provide:
+- Go to definition
+- Code completion
+- Real-time error checking
+- Symbol search
+
+**Supported editors:** VSCode, Neovim, Emacs, Vim, Sublime Text, and any editor with LSP support.
+
+### Code Formatting
+
+Automatically format all C source files:
+
+```bash
+make format
+```
+
+Uses `clang-format` with 4-space indentation. Configuration in `.clang-format`.
 
 ## What Next?
 
